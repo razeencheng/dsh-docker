@@ -22,7 +22,7 @@ make build TAG=lite INSTALL_PYTHON=false INSTALL_GO=false INSTALL_DOCKER=false
 make smoke TAG=lite INSTALL_PYTHON=false INSTALL_GO=false INSTALL_DOCKER=false
 ```
 
-`scripts/smoke-test.sh` 检查非 root 用户、基础工具、可选工具是否符合构建开关、Bubblewrap、CLI 启动及 Web 健康检查。运行环境必须支持非特权用户命名空间，参见[部署指南](docs/deployment.md#沙箱要求)。
+`scripts/smoke-test.sh` 检查非 root 用户、基础工具、可选工具是否符合构建开关、CLI 启动及 Web 健康检查。它通过 Harness 的实际沙箱插件选择 Bubblewrap 或 Landlock，验证 `workspace-write` 可以写入工作目录、不能修改或创建工作目录外的文件，以及 `read-only` 不能写入工作目录。不能仅凭独立 `bwrap` 命令失败判定整个沙箱不可用，参见[部署指南](docs/deployment.md#沙箱要求)。
 
 ## 提交要求
 

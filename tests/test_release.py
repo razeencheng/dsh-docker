@@ -1,4 +1,9 @@
+import argparse
 import copy
+import json
+import os
+import tempfile
+from unittest.mock import Mock, patch
 import importlib.util
 import pathlib
 import unittest
@@ -146,6 +151,27 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release.plan(state, {T2: A}, C)
         self.assertEqual(state, before)
+
+    def test_queued_event_uses_current_checkout_not_old_event_commit(self):
+        repository = Mock()
+        repository.load_state.return_value = (None, None)
+        upstream = Mock()
+        upstream.tags.return_value = {T2: B}
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / 'output'
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(directory)
+                with patch.object(release, 'GitHub', side_effect=[repository, upstream]), \
+                     patch.object(release.subprocess, 'check_output', return_value=C + '\n'), \
+                     patch.dict(os.environ, {'GITHUB_REPOSITORY': 'example/repo',
+                                             'GITHUB_SHA': A, 'GITHUB_OUTPUT': str(output)}):
+                    release.prepare(argparse.Namespace(tag='', revision=None))
+                jobs = json.loads(pathlib.Path('release-plan.json').read_text())
+                self.assertEqual(jobs[0]['packaging_sha'], C)
+                self.assertIn('packaging_sha=' + C, output.read_text())
+            finally:
+                os.chdir(old_cwd)
 
     def test_annotated_tag_is_peeled_to_commit(self):
         calls = []

@@ -295,7 +295,8 @@ def publish(job, artifacts, state):
 def prepare(args):
     github = GitHub(os.environ['GITHUB_REPOSITORY'])
     previous, blob_sha = github.load_state()
-    state, jobs = plan(previous, GitHub(UPSTREAM).tags(), os.environ['GITHUB_SHA'],
+    packaging_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    state, jobs = plan(previous, GitHub(UPSTREAM).tags(), packaging_sha,
                        manual_tag=args.tag or None, revision=args.revision)
     if state != previous:
         github.save_state(state, blob_sha)
@@ -306,6 +307,7 @@ def prepare(args):
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
         output.write('matrix=' + json.dumps(matrix, separators=(',', ':')) + '\n')
         output.write('has_work=' + str(bool(jobs)).lower() + '\n')
+        output.write('packaging_sha=' + packaging_sha + '\n')
     print(f'Planned {len(jobs)} release(s): ' + ', '.join(j['tag'] for j in jobs))
 
 

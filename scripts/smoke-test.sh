@@ -18,8 +18,56 @@ docker run --rm "${security[@]}" --entrypoint /bin/bash "$image" -euc '
   test -w /workspace
   test ! -S /var/run/docker.sock
   test ! -e /usr/bin/dockerd
-  bwrap --ro-bind / / --dev /dev --proc /proc --die-with-parent -- true
 '
+# Exercise Harness's real backend selection (Bubblewrap, then Landlock).
+# The outside target is writable before confinement, so Unix ownership cannot
+# accidentally make a broken sandbox look safe.
+docker run --rm -i "${security[@]}" --entrypoint node "$image" --input-type=module <<'NODE'
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { basename } from 'node:path';
+const require = createRequire('/opt/dsh/package.json');
+const { Context } = await import(require.resolve('@deepseek-ai/cordis'));
+const { LocalSandboxProvider } = await import(require.resolve('@deepseek-ai/dsh-sandbox-local'));
+const id = randomUUID();
+const inside = `/workspace/sandbox-${id}`;
+const readonly = `${inside}-readonly`;
+const outside = `/data/sandbox-${id}`;
+const created = `${outside}-new`;
+writeFileSync(outside, 'original');
+const ctx = new Context();
+try {
+  await ctx.plugin(LocalSandboxProvider, {});
+  async function run(code, mode) {
+    const confined = await ctx.sandbox.confine([process.execPath, '-e', code], {
+      mode, workspaceRoot: '/workspace',
+    });
+    assert.ok(['bwrap', 'landlock-run'].includes(basename(confined.argv[0])));
+    const result = spawnSync(confined.argv[0], confined.argv.slice(1), {
+      encoding: 'utf8', timeout: 10000,
+    });
+    assert.equal(result.status, 0, result.stderr || String(result.error));
+    console.log(`Sandbox ${mode}: ${basename(confined.argv[0])}, ${confined.enforcement}`);
+  }
+  const deny = path => `try { fs.writeFileSync(${JSON.stringify(path)}, 'escaped'); process.exit(99); }
+    catch (error) { if (!['EACCES', 'EROFS'].includes(error.code)) throw error; }`;
+  await run(`const fs = require('node:fs');
+    fs.writeFileSync(${JSON.stringify(inside)}, 'allowed');
+    ${deny(outside)}
+    ${deny(created)}`, 'workspace-write');
+  assert.equal(readFileSync(inside, 'utf8'), 'allowed');
+  assert.equal(readFileSync(outside, 'utf8'), 'original');
+  assert.equal(existsSync(created), false);
+  await run(`const fs = require('node:fs'); ${deny(readonly)}`, 'read-only');
+  assert.equal(existsSync(readonly), false);
+} finally {
+  await ctx.fiber.dispose();
+  for (const path of [inside, readonly, outside, created]) rmSync(path, { force: true });
+}
+NODE
 docker run --rm --entrypoint /bin/bash "$image" -euc '
   if [ "$1" = true ]; then python3 --version; python3 -m pip --version; python3 -m venv /tmp/check-venv; elif command -v python3; then echo "Python was not disabled" >&2; exit 1; fi
   if [ "$2" = true ]; then go version; elif command -v go; then echo "Go was not disabled" >&2; exit 1; fi

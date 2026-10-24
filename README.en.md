@@ -6,6 +6,8 @@ Community-maintained, **unofficial** Docker packaging for [DeepSeek Harness](htt
 
 The image includes Node.js/npm/pnpm, Git, OpenSSH client, common shell utilities, build tools and Bubblewrap. Python 3 with pip/venv, Go, and Docker CLI with Buildx/Compose are enabled by default. It runs as UID/GID `1000:1000`, with `HOME=/data/home` and `DSH_HOME=/data/.dsh`.
 
+Harness probes Bubblewrap first, then falls back to its native Landlock backend when available. A standalone `bwrap` failure does not establish that all sandboxing is unavailable. Smoke tests exercise Harness's actual backend selection and verify allowed workspace writes and denied writes outside the workspace.
+
 ## Quick start
 
 Install Docker Engine and the Compose plugin on a Linux server:

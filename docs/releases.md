@@ -30,7 +30,7 @@
 
 1. 将发现的上游提交、打包仓库提交、预留修订号与待办队列写入 `release-state` 分支的 `state.json`。
 2. 分别在原生 `amd64`、`arm64` Linux runner 上构建镜像。
-3. 每个架构验证工具、非 root 用户、CLI、Web 健康检查和 Bubblewrap；验证通过后推送临时架构镜像并记录摘要。
+3. 每个架构验证工具、非 root 用户、CLI、Web 健康检查，以及 Harness 实际选择的 Bubblewrap 或 Landlock 后端是否限制目录内外写入；验证通过后推送临时架构镜像并记录摘要。
 4. 只有同一版本的两个架构都通过，才合并发布多架构镜像，并更新版本别名。
 5. 检查清单同时包含 `linux/amd64`、`linux/arm64`，验证别名摘要，再记录发布完成。
 

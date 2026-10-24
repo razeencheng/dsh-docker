@@ -78,14 +78,26 @@ docker compose logs --tail=100 dsh
 
 ## 沙箱要求
 
-`workspace-write` 和 `read-only` 需要可用的命令沙箱。镜像包含 Bubblewrap，Compose 为其用户命名空间调用设置 `seccomp=unconfined`，同时保留非 root 用户、全部 capabilities 移除和 `no-new-privileges`。这是明确的兼容性取舍，不是特权容器配置。
+`workspace-write` 和 `read-only` 需要至少一个真实沙箱后端可用。当前打包的上游 `LocalSandboxProvider` 会先探测 Bubblewrap，失败时尝试原生 Landlock 后端。宿主机不允许 Bubblewrap 的用户命名空间或挂载操作时，Landlock 仍可能可用，取决于内核与运行环境支持。
+
+Compose 保留非 root 用户、全部 capabilities 移除和 `no-new-privileges`，并为兼容 Bubblewrap 调用设置 `seccomp=unconfined`，不禁用 Docker AppArmor。应验证实际文件限制，而不是要求每个后端单独成功。
+
+对已经构建或拉取的镜像运行完整启动测试，将 `TAG` 替换为所选标签：
+
+```sh
+make smoke IMAGE=razeencheng/dsh TAG=local
+```
+
+该测试在临时容器中加载 Harness 的实际沙箱插件，确认 `workspace-write` 能写入 `/workspace`，不能修改或创建 `/data` 中原本有权限写入的文件，并确认 `read-only` 不能写入工作目录。它还检查工具、CLI 和 Web。禁用可选工具的自定义镜像需传入对应的 `INSTALL_*` 参数，见[贡献指南](../CONTRIBUTING.md)。
+
+下面的命令只诊断 Bubblewrap 后端：
 
 ```sh
 docker compose exec dsh bwrap \
   --ro-bind / / --dev /dev --proc /proc --die-with-parent -- true
 ```
 
-无输出且退出码为 0 表示基础沙箱调用可用。若宿主机限制非特权用户命名空间，检查：
+无输出且退出码为 0 表示此次 Bubblewrap 调用可用；失败不表示 Landlock 也不可用。确实需要排查 Bubblewrap 时，可以检查宿主机用户命名空间配置：
 
 ```sh
 sysctl kernel.unprivileged_userns_clone
@@ -93,7 +105,7 @@ sysctl user.max_user_namespaces
 sysctl kernel.apparmor_restrict_unprivileged_userns
 ```
 
-部分系统没有其中某些参数。Ubuntu 的 AppArmor 限制也可能影响运行；应由管理员根据主机策略配置相应权限。CI 仅在一次性 GitHub runner 上关闭对应的 AppArmor 用户命名空间限制，这不代表共享服务器应自动照搬。不要用切换到 `danger-full-access` 来掩盖沙箱不可用。
+部分系统没有其中某些参数。Ubuntu 的用户命名空间限制或 Docker AppArmor 的挂载限制也可能阻止 Bubblewrap。CI 对一次性 runner 的相关 sysctl 调整只为支持 Bubblewrap，不是 Landlock 的必需条件，也不等于禁用 Docker AppArmor。不要为了使某个后端探测通过就自动放开宿主机策略；若真实沙箱测试失败，应检查日志与内核支持，不要切换到 `danger-full-access` 来掩盖问题。
 
 ## 使用开发工具
 

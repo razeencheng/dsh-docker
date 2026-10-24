@@ -6,7 +6,7 @@
 
 - 使用 UID/GID `1000:1000`，移除全部 Linux capabilities，并开启 `no-new-privileges`。
 - Compose 的 Web 端口默认仅绑定 `127.0.0.1`；外部访问使用 SSH 隧道或带认证的 TLS 反向代理。
-- 默认权限模式为 `workspace-write`，包含 Bubblewrap。Compose 为支持嵌套用户命名空间使用 `seccomp=unconfined`，因此 Docker 默认 seccomp 过滤未启用，不能把这份配置视作完整隔离保证。
+- 默认权限模式为 `workspace-write`。上游先探测 Bubblewrap，不可用时尝试原生 Landlock 后端；需要至少一个真实后端可用。Compose 为兼容 Bubblewrap 的用户命名空间调用使用 `seccomp=unconfined`，因此 Docker 默认 seccomp 过滤未启用；配置不禁用 Docker AppArmor，不能把这份配置视作完整隔离保证。
 - 默认不安装 Docker daemon，也不挂载宿主机 Docker socket。`docker-compose.docker.yml` 是明确启用宿主机控制能力的选项。
 - `config` 只读挂载；`data`、`workspace`、`plugins` 可写。挂载目录中的修改会直接作用于宿主机。
 

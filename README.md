@@ -49,12 +49,14 @@ ssh -N -L 3080:127.0.0.1:3080 user@server
 | JavaScript | Node.js、npm、pnpm | 是 | — |
 | 版本控制与连接 | Git、OpenSSH 客户端 | 是 | — |
 | 开发与文件处理 | curl、jq、ripgrep、zip/unzip、rsync、make、GCC/G++、pkg-config 等 | 是 | — |
-| 命令隔离 | Bubblewrap | 是 | — |
+| 命令隔离 | Bubblewrap、上游原生 Landlock 后端 | 是 | — |
 | Python | Python 3、pip、venv、`python` 命令 | 是 | `INSTALL_PYTHON` |
 | Go | Go 工具链 | 是 | `INSTALL_GO` |
 | Docker | Docker CLI、Buildx、Compose 插件 | 是 | `INSTALL_DOCKER` |
 
 可选开关接受 `true` 或 `false`，只在**构建镜像时**生效。给运行中的容器设置同名环境变量不会卸载工具。发布到 Docker Hub 的默认镜像包含全部工具。
+
+上游会先探测 Bubblewrap，不可用时尝试 Landlock。单独运行 `bwrap` 失败不能判定整个沙箱不可用；镜像启动测试会通过 Harness 的实际后端检查工作目录内外的写入限制，详见[沙箱要求](docs/deployment.md#沙箱要求)。
 
 Docker 工具只包含客户端，镜像内没有 Docker daemon，默认也不挂载宿主机 Docker socket。需要构建镜像或管理容器时，按[显式启用 Docker 访问](docs/deployment.md#显式启用宿主机-docker-访问)配置。
 
