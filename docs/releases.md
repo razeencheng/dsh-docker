@@ -90,6 +90,6 @@ gh run list --repo razeencheng/dsh-docker --workflow release.yml
 
 ## CI 和部署的关系
 
-[`ci.yml`](../.github/workflows/ci.yml) 对 `main` 推送执行发布规划测试、ShellCheck、Compose 配置和 actionlint 检查。PR 与手动 CI 还构建并检查默认 `amd64`、默认 `arm64` 和可选工具全部关闭的 `amd64` 镜像，不推送发行标签。
+[`ci.yml`](../.github/workflows/ci.yml) 对所有运行执行发布规划测试、ShellCheck、Compose 配置和 actionlint 检查。PR 修改 `Dockerfile`、`docker/**` 或 `scripts/smoke-test.sh` 时，以及手动运行 CI 时，才在前置检查通过后构建三个组合：默认 `amd64`、默认 `arm64` 和可选工具全部关闭的 `amd64`。仅修改文档或 Actions 依赖的 PR、普通 `main` 推送不构建镜像；CI 不推送发行标签。
 
 镜像发布只修改 Docker Hub 与发布状态，不登录用户服务器，不自动执行 `docker compose pull` 或重建运行中的容器。服务器升级、数据备份和固定版本回滚见[部署指南](deployment.md#迁移升级与回滚)。

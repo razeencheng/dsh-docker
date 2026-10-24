@@ -9,8 +9,7 @@ for flag in "$python_enabled" "$go_enabled" "$docker_enabled"; do
   case "$flag" in true|false) ;; *) printf 'Expected true or false, got %s\n' "$flag" >&2; exit 2 ;; esac
 done
 container="dsh-smoke-$$-${RANDOM}"
-cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
-trap 'cleanup' EXIT
+trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
 security=(--security-opt seccomp=unconfined --security-opt no-new-privileges --cap-drop ALL)
 docker run --rm "${security[@]}" --entrypoint /bin/bash "$image" -euc '
   test "$(id -u)" = 1000

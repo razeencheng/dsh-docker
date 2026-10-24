@@ -30,12 +30,14 @@ make smoke TAG=lite INSTALL_PYTHON=false INSTALL_GO=false INSTALL_DOCKER=false
 - 修改环境变量、标签策略或目录布局时，同步更新相关文档。
 - 保持 Python 发布规划逻辑只依赖标准库；状态变更需有覆盖失败与重试场景的测试。
 - 不要提交 `.env`、API Key、SSH 私钥、Docker 登录配置、`data/` 中的会话或项目私有文件。
-- 第三方 Actions 固定到提交 SHA；Dependabot 负责提出更新。
+- 第三方 Actions 固定到提交 SHA；Dependabot 每周将 Actions 更新合并为一个 PR，Docker 基础镜像更新另保留最多一个待处理 PR。
 - 未运行的架构或测试请明确说明，不要将构建成功等同于运行验证通过。
 
 ## CI 与发布边界
 
-PR 和手动运行的 CI 会构建三个组合：默认工具的 `amd64`、默认工具的 `arm64`、禁用全部可选工具的 `amd64`。每个组合运行镜像启动检查。推送 `main` 执行静态检查和发布规划测试，不自动覆盖 Docker Hub 镜像。
+所有 CI 运行先执行静态检查和发布规划测试。PR 只有修改 `Dockerfile`、`docker/**` 或 `scripts/smoke-test.sh` 才触发镜像测试；仅修改文档或 Actions 依赖的 PR 不构建镜像。手动 CI 始终请求镜像测试，但前置检查必须通过。
+
+镜像测试包含三个组合：默认工具的 `amd64`、默认工具的 `arm64`、禁用全部可选工具的 `amd64`，每个组合运行启动检查。推送 `main` 只执行前置检查，不自动覆盖 Docker Hub 镜像。
 
 发布工作流独立运行，只在 `razeencheng/dsh-docker` 的 `main` 分支执行；Fork 默认不能向该镜像仓库发布。Docker Hub 凭据只交给需要发布的步骤。具体发布策略见[发布指南](docs/releases.md)。
 
