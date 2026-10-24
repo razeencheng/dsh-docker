@@ -1,0 +1,15 @@
+name: Bug report / 问题反馈
+description: Report a packaging, deployment, or release issue.
+body:
+  - type: textarea
+    attributes:
+      label: Environment / 环境
+      description: Image tag or digest, architecture, host OS, Docker version.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Expected and actual behavior; include redacted logs. Never paste API keys, tokens, or session data.
+    validations:
+      required: true

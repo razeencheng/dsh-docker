@@ -1,0 +1,150 @@
+name: Release images
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Exact upstream tag; leave empty to discover new tags'
+        type: string
+        default: ''
+      revision:
+        description: 'Optional unused packaging revision number (requires a tag)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# Serialize discovery, publication and state updates across scheduled/manual runs.
+concurrency:
+  group: docker-hub-release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  prepare:
+    if: github.repository == 'razeencheng/dsh-docker' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_work: ${{ steps.plan.outputs.has_work }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test release planner
+        run: python3 -m unittest discover -s tests -v
+      - name: Discover and persist release queue
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          args=()
+          if [[ -n "$UPSTREAM_TAG" ]]; then args+=(--tag "$UPSTREAM_TAG"); fi
+          if [[ -n "$REVISION" ]]; then args+=(--revision "$REVISION"); fi
+          python3 scripts/release.py prepare "${args[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.plan.outputs.has_work == 'true'
+        with:
+          name: release-plan
+          path: release-plan.json
+          retention-days: 14
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.has_work == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ matrix.packaging_sha }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build native image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: dsh:test
+          build-args: |
+            DSH_REF=${{ matrix.sha }}
+            DSH_TAG=${{ matrix.tag }}
+            PACKAGING_REVISION=${{ matrix.revision }}
+          cache-from: type=gha,scope=dsh-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=dsh-${{ matrix.arch }}
+      - name: Enable unprivileged namespaces on disposable runner
+        run: |
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Smoke test tools, Web UI and sandbox
+        run: bash scripts/smoke-test.sh dsh:test
+      - name: Log in only after image tests pass
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DSH_HUB_USERNAME }}
+          password: ${{ secrets.DSH_HUB_TOKEN }}
+      - name: Push tested architecture image
+        env:
+          JOB_JSON: ${{ toJSON(matrix) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          job = json.loads(os.environ['JOB_JSON'])
+          job.pop('runner')
+          image = 'razeencheng/dsh'
+          ref = f"{image}:build-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{job['version']}-{job['arch']}"
+          subprocess.run(['docker', 'tag', 'dsh:test', ref], check=True)
+          subprocess.run(['docker', 'push', ref], check=True)
+          result = subprocess.check_output(['docker', 'buildx', 'imagetools', 'inspect', ref,
+                                           '--format', '{{json .Manifest}}'], text=True)
+          job['digest'] = json.loads(result)['digest']
+          pathlib.Path('digests').mkdir()
+          path = pathlib.Path('digests') / f"{job['version']}-r{job['revision']}-{job['arch']}.json"
+          path.write_text(json.dumps(job) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.version }}-r${{ matrix.revision }}-${{ matrix.arch }}
+          path: digests/*.json
+          retention-days: 14
+
+  publish:
+    needs: [prepare, build]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.has_work == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-plan
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DSH_HUB_USERNAME }}
+          password: ${{ secrets.DSH_HUB_TOKEN }}
+      - name: Publish complete releases and advance aliases
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/release.py finalize

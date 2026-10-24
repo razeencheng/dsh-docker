@@ -1,0 +1,9 @@
+# Opt-in only: grants access to the host Docker daemon (often root-equivalent).
+# Linux: export DOCKER_GID="$(stat -c '%g' /var/run/docker.sock)"
+# docker compose -f docker-compose.yml -f docker-compose.docker.yml up -d
+services:
+  dsh:
+    group_add:
+      - "${DOCKER_GID:?Set DOCKER_GID to the host Docker socket group ID}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

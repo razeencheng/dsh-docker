@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test release state transitions
+        run: python3 -m unittest discover -s tests -v
+      - name: Check shell scripts
+        run: |
+          find docker scripts -name '*.sh' -print0 | xargs -0 -r shellcheck
+      - name: Check Compose configuration
+        run: |
+          docker compose config --quiet
+          DOCKER_GID=999 docker compose -f docker-compose.yml -f docker-compose.docker.yml config --quiet
+      - name: Check workflow syntax
+        run: |
+          # GitHub supports concurrency.queue; actionlint 1.7.12 does not yet.
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 \
+            -ignore '^unexpected key "queue" for "concurrency" section\.'
+
+  image:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            optional_tools: 'true'
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            optional_tools: 'true'
+          - arch: amd64
+            runner: ubuntu-24.04
+            optional_tools: 'false'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: dsh:test
+          build-args: |
+            INSTALL_PYTHON=${{ matrix.optional_tools }}
+            INSTALL_GO=${{ matrix.optional_tools }}
+            INSTALL_DOCKER=${{ matrix.optional_tools }}
+          cache-from: type=gha,scope=dsh-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ci-${{ matrix.arch }}-${{ matrix.optional_tools }}
+      - name: Enable unprivileged namespaces on disposable runner
+        run: |
+          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Smoke test
+        env:
+          OPTIONAL_TOOLS: ${{ matrix.optional_tools }}
+        run: bash scripts/smoke-test.sh dsh:test "$OPTIONAL_TOOLS" "$OPTIONAL_TOOLS" "$OPTIONAL_TOOLS"

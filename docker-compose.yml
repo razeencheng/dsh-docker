@@ -1,0 +1,56 @@
+name: deepseek-harness
+
+services:
+  dsh:
+    image: ${DSH_IMAGE:-razeencheng/dsh:latest}
+    container_name: deepseek-harness
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: ${DSH_CONTAINER_PORT:-3080}
+      DSH_HOME: /data/.dsh
+      DSH_PERMISSION_MODE: ${DSH_PERMISSION_MODE:-workspace-write}
+      DSH_TOOLS_MODE: ${DSH_TOOLS_MODE:-native}
+      DSH_TELEMETRY_DISABLED: ${DSH_TELEMETRY_DISABLED:-1}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_SEARCH_BASE_URL: ${DEEPSEEK_SEARCH_BASE_URL:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,dsh}
+    command:
+      - web
+      - --trusted-host
+      - ${DSH_TRUSTED_HOST:-127.0.0.1:3080}
+    ports:
+      - "${DSH_BIND_ADDRESS:-127.0.0.1}:${DSH_HOST_PORT:-3080}:${DSH_CONTAINER_PORT:-3080}"
+    volumes:
+      - ./data:/data
+      - ./workspace:/workspace
+      - ./plugins:/plugins
+      - ./config:/config:ro
+    working_dir: /workspace
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/dsh-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    stop_grace_period: 15s
+    security_opt:
+      - no-new-privileges:true
+      # Bubblewrap needs clone/unshare/mount namespace syscalls blocked by
+      # Docker's default seccomp profile. The process still runs as UID 1000
+      # with every Linux capability dropped.
+      - seccomp=unconfined
+    cap_drop:
+      - ALL
+    pids_limit: 512
+    mem_limit: ${DSH_MEMORY_LIMIT:-4g}
+    cpus: ${DSH_CPU_LIMIT:-4.0}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${DSH_LOG_MAX_SIZE:-20m}
+        max-file: ${DSH_LOG_MAX_FILES:-5}

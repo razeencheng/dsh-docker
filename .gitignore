@@ -1,0 +1,24 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Persistent runtime data (never publish conversations or credentials)
+data/
+workspace/
+plugins/
+config/*
+!config/.gitkeep
+
+# Generated release files / local tooling
+release-plan.json
+digests/
+__pycache__/
+*.py[cod]
+.venv/
+.DS_Store
+*.log
