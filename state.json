@@ -1,6 +1,6 @@
 {
   "attempts": {
-    "dsh-v0.2.1-rc.3": 4
+    "dsh-v0.2.1-rc.3": 5
   },
   "latest": {
     "digest": "sha256:27e4cdaf9db9674428b69e30d96eddf75b62380c7163dd390c4e47407802129e",
@@ -45,7 +45,15 @@
     "dsh-v0.2.1-rc.2": "687f282e8625c6b8d11ff58211a90524be2e4317",
     "dsh-v0.2.1-rc.3": "1f81c047fc48fa190a683e469daa699857e9afe8"
   },
-  "pending": {},
+  "pending": {
+    "dsh-v0.2.1-rc.3": {
+      "packaging_sha": "b6d2ab6f587d6e12f3e67d61fac277083bd4beb3",
+      "revision": 5,
+      "sha": "1f81c047fc48fa190a683e469daa699857e9afe8",
+      "tag": "dsh-v0.2.1-rc.3",
+      "version": "0.2.1-rc.3"
+    }
+  },
   "published": {
     "dsh-v0.2.1-rc.3": {
       "4": {
@@ -59,7 +67,7 @@
     }
   },
   "reserved": {
-    "dsh-v0.2.1-rc.3": 4
+    "dsh-v0.2.1-rc.3": 5
   },
   "schema": 1
 }
