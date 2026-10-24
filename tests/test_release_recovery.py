@@ -164,6 +164,25 @@ class ReleaseRecoveryTests(unittest.TestCase):
         self.assertEqual(registry.latest_writes, [])
         self.assertNotIn(release.IMAGE + ':1.0.0', registry.refs)
 
+    def test_retry_reuses_tested_immutable_index_when_rebuild_digests_change(self):
+        registry = MemoryRegistry()
+        registry.fail_after_latest_once = True
+        state, jobs = release.plan(None, {OLD: UPSTREAM_SHA}, PACKAGING_SHA)
+        job = jobs[0]
+        with patch.object(release, 'docker', side_effect=registry.docker), \
+                patch.object(release, 'regctl', side_effect=registry.regctl):
+            with self.assertRaises(subprocess.CalledProcessError):
+                release.publish(job, self.artifacts(job, registry), state)
+            original = registry.refs[release.IMAGE + ':1.0.0-r1']
+            registry.arch_digests = {
+                arch: registry.store({'platform': {'os': 'linux', 'architecture': arch}, 'rebuilt': True})
+                for arch in ('amd64', 'arm64')
+            }
+            restored = release.publish(job, self.artifacts(job, registry), state)
+        self.assertEqual(restored, original)
+        self.assertEqual(registry.index_creates, 1)
+        self.assertEqual(registry.refs[release.IMAGE + ':1.0.0'], original)
+
     def exercise_recovery(self, failure):
         registry = MemoryRegistry()
         state, initial_jobs = release.plan(None, {OLD: UPSTREAM_SHA}, PACKAGING_SHA)

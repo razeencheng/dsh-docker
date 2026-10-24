@@ -288,8 +288,14 @@ def publish(job, artifacts, state):
         raise ValueError(f'Published index metadata missing or invalid: {immutable}')
     platforms = {(m.get('platform', {}).get('os'), m.get('platform', {}).get('architecture'), m.get('digest'))
                  for m in raw.get('manifests', [])}
+    if len(raw.get('manifests', [])) != 2 or {(os_name, arch) for os_name, arch, _ in platforms} != {
+            ('linux', 'amd64'), ('linux', 'arm64')}:
+        raise ValueError(f'Incomplete published manifest: {immutable}')
     expected_platforms = {('linux', arch, artifacts[arch]['digest']) for arch in ('amd64', 'arm64')}
-    if platforms != expected_platforms:
+    # A retry may rebuild different bytes from the same source (e.g. apt
+    # updates). Reuse the original tested index when its identity matches;
+    # never replace an immutable revision with the retry's new image bytes.
+    if not existing and platforms != expected_platforms:
         raise ValueError(f'Published manifest differs from tested architectures: {immutable}')
     reconcile_latest(state, read_registry_latest())
     args = ['buildx', 'imagetools', 'create', '--tag', f"{IMAGE}:{job['version']}",
