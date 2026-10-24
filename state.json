@@ -1,6 +1,6 @@
 {
   "attempts": {
-    "dsh-v0.2.1-rc.3": 1
+    "dsh-v0.2.1-rc.3": 2
   },
   "latest": null,
   "observed": {
@@ -40,8 +40,8 @@
   },
   "pending": {
     "dsh-v0.2.1-rc.3": {
-      "packaging_sha": "0ea43d0fe65ce445970006e292fca90e40e67e40",
-      "revision": 1,
+      "packaging_sha": "91168bdb45691782e5b87c6bdd05bf396ae6fead",
+      "revision": 2,
       "sha": "1f81c047fc48fa190a683e469daa699857e9afe8",
       "tag": "dsh-v0.2.1-rc.3",
       "version": "0.2.1-rc.3"
@@ -49,7 +49,7 @@
   },
   "published": {},
   "reserved": {
-    "dsh-v0.2.1-rc.3": 1
+    "dsh-v0.2.1-rc.3": 2
   },
   "schema": 1
 }
