@@ -24,7 +24,7 @@ make smoke TAG=lite INSTALL_PYTHON=false INSTALL_GO=false INSTALL_DOCKER=false
 
 `scripts/smoke-test.sh` 检查非 root 用户、基础工具、可选工具是否符合构建开关、CLI 启动及 Web 健康检查。它通过 Harness 的实际沙箱插件选择 Bubblewrap 或 Landlock，验证 `workspace-write` 可以写入工作目录、不能修改或创建工作目录外的文件，以及 `read-only` 不能写入工作目录。不能仅凭独立 `bwrap` 命令失败判定整个沙箱不可用，参见[部署指南](docs/deployment.md#沙箱要求)。
 
-测试还在 `workspace-write` 中运行 `npm cache verify`；启用 Go 时，编译并运行仅依赖标准库的程序，无需下载项目依赖，以验证默认缓存目录可用。
+测试还在 `workspace-write` 中运行 `npm cache verify`，并用 pnpm 离线安装本地测试包、加载其模块；启用 Go 时，编译并运行仅依赖标准库的程序，无需下载项目依赖，以验证默认缓存目录可用。
 
 Web 验证包括未认证首页返回 401、启动 token 交换返回 303 并设置 cookie、携带 cookie 访问首页返回 200，以及启动日志没有插件激活或模块导入失败。
 

@@ -85,7 +85,9 @@ jobs:
             DSH_REF=${{ matrix.sha }}
             DSH_TAG=${{ matrix.tag }}
             PACKAGING_REVISION=${{ matrix.revision }}
-          cache-from: type=gha,scope=dsh-${{ matrix.arch }}
+          cache-from: |
+            type=gha,scope=dsh-${{ matrix.arch }}
+            type=gha,scope=ci-${{ matrix.arch }}-true
           cache-to: type=gha,mode=max,scope=dsh-${{ matrix.arch }}
       - name: Enable unprivileged namespaces on disposable runner
         run: |

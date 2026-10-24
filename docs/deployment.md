@@ -28,7 +28,7 @@ chmod 600 .env
 
 入口程序创建用户目录；重建容器会保留挂载到 `data` 的内容。镜像内其他临时修改不会因此持久化，系统工具应写入 Dockerfile 后重新构建。
 
-默认构建缓存放在 `/tmp/dsh-cache`：Go 的 `GOCACHE` 和 `GOMODCACHE` 分别使用 `go-build`、`go-mod` 子目录，`NPM_CONFIG_CACHE`、`PIP_CACHE_DIR`、`XDG_CACHE_HOME` 分别使用 `npm`、`pip`、`xdg` 子目录。这样工具在 `workspace-write` 中无需写入被限制的 `/data` 主目录；这些缓存可重新生成，容器重建后不保留。`HOME`、`GOPATH` 中的程序和 npm 全局安装目录仍位于持久化的 `/data/home`，全局安装需要相应写入权限，项目依赖和 Python 虚拟环境优先放在 `/workspace` 内。
+默认构建缓存放在 `/tmp/dsh-cache`：Go 的 `GOCACHE` 和 `GOMODCACHE` 分别使用 `go-build`、`go-mod` 子目录，`NPM_CONFIG_CACHE`、`PIP_CACHE_DIR`、`XDG_CACHE_HOME` 分别使用 `npm`、`pip`、`xdg` 子目录。pnpm 的 `PNPM_CONFIG_STORE_DIR` 和 `PNPM_CONFIG_STATE_DIR` 分别使用 `pnpm/store`、`pnpm/state`。这样工具在 `workspace-write` 中无需写入被限制的 `/data` 主目录；这些缓存可重新生成，容器重建后不保留。`HOME`、`GOPATH` 中的程序和 npm 全局安装目录仍位于持久化的 `/data/home`，全局安装需要相应写入权限，项目依赖和 Python 虚拟环境优先放在 `/workspace` 内。
 
 ## 访问 Web UI
 

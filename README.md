@@ -97,7 +97,7 @@ make build DSH_REF='<完整提交SHA>' DSH_TAG='dsh-v<版本号>'
 
 将项目放进 `workspace`，或调整 Compose 挂载到自己选择的项目目录。挂载目录中的修改会直接影响宿主机文件，代码仍应使用 Git 管理并定期备份。
 
-Go、npm、pip 和 XDG 默认缓存放在 `/tmp/dsh-cache`，供 `workspace-write` 沙箱写入，容器重建后会重新生成。主目录和用户全局工具仍保存在 `/data/home`；全局安装需要相应写入权限，项目依赖优先放在项目内。
+Go、npm、pnpm、pip 和 XDG 默认缓存放在 `/tmp/dsh-cache`，供 `workspace-write` 沙箱写入，容器重建后会重新生成。主目录和用户全局工具仍保存在 `/data/home`；全局安装需要相应写入权限，项目依赖优先放在项目内。
 
 ```sh
 # 进入容器，查看工具

@@ -87,7 +87,9 @@ jobs:
             INSTALL_PYTHON=${{ matrix.optional_tools }}
             INSTALL_GO=${{ matrix.optional_tools }}
             INSTALL_DOCKER=${{ matrix.optional_tools }}
-          cache-from: type=gha,scope=dsh-${{ matrix.arch }}
+          cache-from: |
+            type=gha,scope=ci-${{ matrix.arch }}-${{ matrix.optional_tools }}
+            type=gha,scope=dsh-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=ci-${{ matrix.arch }}-${{ matrix.optional_tools }}
       - name: Enable unprivileged namespaces on disposable runner
         run: |

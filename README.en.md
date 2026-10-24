@@ -72,7 +72,7 @@ Docker support consists only of client tools. No daemon or host socket is enable
 
 Back up `data` and project files before upgrading. Container recreation preserves these mounts but does not roll back application data changes. Python projects should use a virtual environment, such as `python3 -m venv /workspace/my-project/.venv`.
 
-Default Go, npm, pip and XDG caches use `/tmp/dsh-cache`, which is writable inside `workspace-write` and recreated after container replacement. Home and global tool installation paths remain under `/data/home`; installing global tools requires appropriate write permissions.
+Default Go, npm, pnpm, pip and XDG caches use `/tmp/dsh-cache`, which is writable inside `workspace-write` and recreated after container replacement. Home and global tool installation paths remain under `/data/home`; installing global tools requires appropriate write permissions.
 
 ## Releases
 

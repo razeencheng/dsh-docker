@@ -27,7 +27,7 @@ docker run --rm -i "${security[@]}" -e SMOKE_GO_ENABLED="$go_enabled" \
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
 const require = createRequire('/opt/dsh/package.json');
@@ -40,6 +40,7 @@ const outside = `/data/sandbox-${id}`;
 const created = `${outside}-new`;
 const goSource = `${inside}.go`;
 const goBinary = `${inside}-go`;
+const pnpmRoot = `${inside}-pnpm`;
 writeFileSync(outside, 'original');
 const ctx = new Context();
 try {
@@ -71,6 +72,18 @@ try {
   assert.equal(existsSync(readonly), false);
   await execute(['npm', 'cache', 'verify'], 'workspace-write', 60000);
   console.log('npm cache works inside workspace-write');
+  mkdirSync(`${pnpmRoot}/package`, { recursive: true });
+  mkdirSync(`${pnpmRoot}/project`);
+  writeFileSync(`${pnpmRoot}/package/package.json`, JSON.stringify({
+    name: 'dsh-offline-fixture', version: '1.0.0', main: 'index.js',
+  }));
+  writeFileSync(`${pnpmRoot}/package/index.js`, 'module.exports = "pnpm-offline-ok";\n');
+  writeFileSync(`${pnpmRoot}/project/package.json`, JSON.stringify({ name: 'smoke-workspace', version: '1.0.0' }));
+  await execute(['tar', '-czf', `${pnpmRoot}/fixture.tgz`, '-C', pnpmRoot, 'package'], 'workspace-write');
+  await execute(['pnpm', '--dir', `${pnpmRoot}/project`, 'add', '--offline', '--ignore-scripts', `${pnpmRoot}/fixture.tgz`], 'workspace-write', 60000);
+  const pnpmRun = await run(`console.log(require(${JSON.stringify(`${pnpmRoot}/project/node_modules/dsh-offline-fixture`)}))`, 'workspace-write');
+  assert.equal(pnpmRun.stdout.trim(), 'pnpm-offline-ok');
+  console.log('pnpm installs and loads a local package offline inside workspace-write');
   if (process.env.SMOKE_GO_ENABLED === 'true') {
     writeFileSync(goSource, 'package main\nimport "fmt"\nfunc main() { fmt.Println("go-cache-ok") }\n');
     await execute(['go', 'build', '-o', goBinary, goSource], 'workspace-write', 120000);
@@ -81,6 +94,7 @@ try {
 } finally {
   await ctx.fiber.dispose();
   for (const path of [inside, readonly, outside, created, goSource, goBinary]) rmSync(path, { force: true });
+  rmSync(pnpmRoot, { recursive: true, force: true });
 }
 NODE
 docker run --rm --entrypoint /bin/bash "$image" -euc '
@@ -96,7 +110,7 @@ docker run -d --name "$container" "${security[@]}" \
 for _ in $(seq 1 90); do
   if docker exec "$container" /usr/local/bin/dsh-healthcheck; then
     logs=$(docker logs "$container" 2>&1)
-    if printf '%s\n' "$logs" | grep -Eq '[1-9][0-9]* entr(y|ies) did not activate|failed to import:'; then
+    if grep -Eq '[1-9][0-9]* entr(y|ies) did not activate|failed to import:' <<< "$logs"; then
       printf 'Web plugins did not all activate\n' >&2
       break
     fi
