@@ -147,6 +147,11 @@ jobs:
           path: digests
           merge-multiple: true
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Install pinned OCI index publisher
+        run: |
+          curl --fail --location --retry 3 https://github.com/regclient/regclient/releases/download/v0.11.7/regctl-linux-amd64 -o "$RUNNER_TEMP/regctl"
+          printf '%s  %s\n' '3737fbbdd791e04e7a831640b681f3397a376498e80e2ad9b1b2d27296f239bc' "$RUNNER_TEMP/regctl" | sha256sum --check --strict -
+          sudo install -m 0755 "$RUNNER_TEMP/regctl" /usr/local/bin/regctl
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DSH_HUB_USERNAME }}

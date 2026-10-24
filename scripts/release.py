@@ -220,6 +220,13 @@ def docker(*args):
     return subprocess.run(['docker', *args], check=True, text=True, capture_output=True).stdout
 
 
+def regctl(*args):
+    try:
+        return subprocess.run(['regctl', *args], check=True, text=True, capture_output=True).stdout
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f'OCI index publication failed: {exc.stderr.strip()}') from exc
+
+
 def inspect_manifest(ref, optional=False):
     try:
         return json.loads(docker('buildx', 'imagetools', 'inspect', ref, '--format', '{{json .Manifest}}'))
@@ -263,18 +270,27 @@ def publish(job, artifacts, state):
         if any(raw.get('annotations', {}).get(k) != v for k, v in expected_annotations.items()):
             raise ValueError(f'Immutable revision already exists with different metadata: {immutable}')
     else:
-        arguments = ['buildx', 'imagetools', 'create', '--tag', immutable]
+        # Buildx chooses a Docker list for all-Docker children and drops OCI
+        # annotations. Create only the OCI index, preserving tested manifests
+        # and their Docker-specific configuration (including Healthcheck).
+        arguments = ['index', 'create', immutable,
+                     '--media-type', 'application/vnd.oci.image.index.v1+json']
         for key, value in expected_annotations.items():
-            arguments.extend(['--annotation', f'index:{key}={value}'])
-        arguments.extend(f"{IMAGE}@{artifacts[a]['digest']}" for a in ('amd64', 'arm64'))
-        docker(*arguments)
+            arguments.extend(['--annotation', f'{key}={value}'])
+        for arch in ('amd64', 'arm64'):
+            arguments.extend(['--digest', artifacts[arch]['digest']])
+        regctl(*arguments)
     manifest = inspect_manifest(immutable)
     digest = manifest['digest']
     raw = json.loads(docker('buildx', 'imagetools', 'inspect', immutable, '--raw'))
-    platforms = {(m.get('platform', {}).get('os'), m.get('platform', {}).get('architecture'))
+    if raw.get('mediaType') != 'application/vnd.oci.image.index.v1+json' or any(
+            raw.get('annotations', {}).get(k) != v for k, v in expected_annotations.items()):
+        raise ValueError(f'Published index metadata missing or invalid: {immutable}')
+    platforms = {(m.get('platform', {}).get('os'), m.get('platform', {}).get('architecture'), m.get('digest'))
                  for m in raw.get('manifests', [])}
-    if not {('linux', 'amd64'), ('linux', 'arm64')}.issubset(platforms):
-        raise ValueError(f'Incomplete published manifest: {immutable}')
+    expected_platforms = {('linux', arch, artifacts[arch]['digest']) for arch in ('amd64', 'arm64')}
+    if platforms != expected_platforms:
+        raise ValueError(f'Published manifest differs from tested architectures: {immutable}')
     reconcile_latest(state, read_registry_latest())
     args = ['buildx', 'imagetools', 'create', '--tag', f"{IMAGE}:{job['version']}",
             '--tag', f"{IMAGE}:{job['tag']}"]

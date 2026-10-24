@@ -36,6 +36,7 @@ class MemoryRegistry:
         self.latest_writes = []
         self.index_creates = 0
         self.fail_after_latest_once = False
+        self.drop_index_annotations = False
         self.arch_digests = {
             arch: self.store({'platform': {'os': 'linux', 'architecture': arch}})
             for arch in ('amd64', 'arm64')
@@ -50,6 +51,24 @@ class MemoryRegistry:
         self.refs[ref] = digest
         if ref == release.IMAGE + ':latest':
             self.latest_writes.append(digest)
+
+    def regctl(self, *args):
+        if args[:2] != ('index', 'create'):
+            raise AssertionError(f'Unexpected regctl operation: {args}')
+        translated = ['buildx', 'imagetools', 'create', '--tag', args[2]]
+        arguments = iter(args[3:])
+        for argument in arguments:
+            value = next(arguments)
+            if argument == '--media-type':
+                if value != 'application/vnd.oci.image.index.v1+json':
+                    raise AssertionError('Release index must use OCI media type')
+            elif argument == '--annotation':
+                translated.extend(['--annotation', 'index:' + value])
+            elif argument == '--digest':
+                translated.append(release.IMAGE + '@' + value)
+            else:
+                raise AssertionError(f'Unexpected regctl argument: {argument}')
+        return self.docker(*translated)
 
     def docker(self, *args):
         if args[:2] != ('buildx', 'imagetools'):
@@ -76,7 +95,8 @@ class MemoryRegistry:
                 sources.append(argument.split('@', 1)[1])
         if annotations:
             digest = self.store({
-                'annotations': annotations,
+                'mediaType': 'application/vnd.oci.image.index.v1+json',
+                'annotations': {} if self.drop_index_annotations else annotations,
                 'manifests': [
                     {'digest': source, 'platform': self.objects[source]['platform']}
                     for source in sources
@@ -132,12 +152,25 @@ class ReleaseRecoveryTests(unittest.TestCase):
             for arch, digest in registry.arch_digests.items()
         }
 
+    def test_missing_index_metadata_cannot_advance_aliases(self):
+        registry = MemoryRegistry()
+        registry.drop_index_annotations = True
+        state, jobs = release.plan(None, {OLD: UPSTREAM_SHA}, PACKAGING_SHA)
+        job = jobs[0]
+        with patch.object(release, 'docker', side_effect=registry.docker), \
+                patch.object(release, 'regctl', side_effect=registry.regctl):
+            with self.assertRaisesRegex(ValueError, 'metadata'):
+                release.publish(job, self.artifacts(job, registry), state)
+        self.assertEqual(registry.latest_writes, [])
+        self.assertNotIn(release.IMAGE + ':1.0.0', registry.refs)
+
     def exercise_recovery(self, failure):
         registry = MemoryRegistry()
         state, initial_jobs = release.plan(None, {OLD: UPSTREAM_SHA}, PACKAGING_SHA)
         initial = initial_jobs[0]
 
-        with patch.object(release, 'docker', side_effect=registry.docker):
+        with patch.object(release, 'docker', side_effect=registry.docker), \
+                patch.object(release, 'regctl', side_effect=registry.regctl):
             digest = release.publish(initial, self.artifacts(initial, registry), state)
             release.complete(state, initial, digest)
         registry.latest_writes.clear()
@@ -157,6 +190,7 @@ class ReleaseRecoveryTests(unittest.TestCase):
             args = argparse.Namespace(plan=str(plan_path), artifacts=str(root))
             with patch.object(release, 'GitHub', return_value=store), \
                     patch.object(release, 'docker', side_effect=registry.docker), \
+                    patch.object(release, 'regctl', side_effect=registry.regctl), \
                     patch.dict(os.environ, {'GITHUB_REPOSITORY': 'example/dsh-docker'}, clear=True), \
                     redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(RuntimeError, 'Unpublished releases remain pending'):
