@@ -10,7 +10,7 @@ for flag in "$python_enabled" "$go_enabled" "$docker_enabled"; do
 done
 container="dsh-smoke-$$-${RANDOM}"
 cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
+trap 'cleanup' EXIT
 security=(--security-opt seccomp=unconfined --security-opt no-new-privileges --cap-drop ALL)
 docker run --rm "${security[@]}" --entrypoint /bin/bash "$image" -euc '
   test "$(id -u)" = 1000
