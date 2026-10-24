@@ -40,7 +40,9 @@ docker compose logs -f dsh
 ssh -N -L 3080:127.0.0.1:3080 user@server
 ```
 
-打开 <http://127.0.0.1:3080>。默认端口仅绑定服务器回环地址，不能直接通过服务器公网 IP 访问。域名访问、认证反向代理、目录权限和沙箱要求见[部署指南](docs/deployment.md)。`DSH_TRUSTED_HOST` 校验访问地址，不提供登录认证。
+在服务器运行 `docker compose logs dsh`，找到启动时打印的、包含 `token` 查询参数的登录 URL。日志中的容器 IP 通常不能直接访问：使用上述隧道时，将 URL 的主机和端口替换为 `127.0.0.1:3080`，保留完整路径和 `token` 等查询参数，再在浏览器打开。首次访问不要只打开不含登录参数的裸地址。
+
+启动 URL 中的 token 是敏感登录凭据，不要公开分享或贴入 Issue。Harness 会用它换取签名 cookie，为 API 和 WebSocket 认证；`DSH_TRUSTED_HOST` 仅校验访问地址。默认端口仅绑定服务器回环地址，域名访问及额外的认证反向代理配置见[部署指南](docs/deployment.md)。
 
 ## 内置工具
 
@@ -88,12 +90,14 @@ make build DSH_REF='<完整提交SHA>' DSH_TAG='dsh-v<版本号>'
 | 宿主机路径 | 容器路径 | 内容 |
 | --- | --- | --- |
 | `./data/.dsh` | `/data/.dsh` | Harness 配置、会话、插件与凭据 |
-| `./data/home` | `/data/home` | 用户主目录、缓存、Git/SSH 配置和用户安装工具 |
+| `./data/home` | `/data/home` | 用户主目录、Git/SSH 配置和用户安装工具 |
 | `./workspace` | `/workspace` | 项目和工作文件 |
 | `./plugins` | `/plugins` | 本地插件源码 |
 | `./config` | `/config` | 自定义配置，只读挂载 |
 
 将项目放进 `workspace`，或调整 Compose 挂载到自己选择的项目目录。挂载目录中的修改会直接影响宿主机文件，代码仍应使用 Git 管理并定期备份。
+
+Go、npm、pip 和 XDG 默认缓存放在 `/tmp/dsh-cache`，供 `workspace-write` 沙箱写入，容器重建后会重新生成。主目录和用户全局工具仍保存在 `/data/home`；全局安装需要相应写入权限，项目依赖优先放在项目内。
 
 ```sh
 # 进入容器，查看工具

@@ -14,12 +14,15 @@ RUN case "$DSH_REF" in *[!0-9a-f]*|'') echo 'DSH_REF must be a full lowercase Gi
     && tar -xzf /tmp/dsh.tar.gz --strip-components=1 -C /src \
     && rm /tmp/dsh.tar.gz
 RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
+COPY docker/prepare-runtime.mjs /tmp/prepare-runtime.mjs
+RUN node /tmp/prepare-runtime.mjs /src \
+    && pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir=/pnpm/store
 RUN DSH_CLIENT_COMMIT_HASH="$DSH_REF" pnpm run build:artifacts \
     && pnpm exec tsx native/system/scripts/build.ts
 RUN --mount=type=cache,target=/pnpm/store \
-    pnpm --filter dsh-python-runtime-closure deploy --legacy --prod \
+    pnpm --filter dsh-docker-runtime deploy --legacy --prod \
       --config.store-dir=/pnpm/store \
       --config.allow-unused-patches=true \
       --config.node-linker=hoisted \
@@ -62,6 +65,11 @@ ENV NODE_ENV=production \
     PORT=3080 \
     GOPATH=/data/home/go \
     NPM_CONFIG_PREFIX=/data/home/.local \
+    GOCACHE=/tmp/dsh-cache/go-build \
+    GOMODCACHE=/tmp/dsh-cache/go-mod \
+    NPM_CONFIG_CACHE=/tmp/dsh-cache/npm \
+    PIP_CACHE_DIR=/tmp/dsh-cache/pip \
+    XDG_CACHE_HOME=/tmp/dsh-cache/xdg \
     PATH=/data/home/.local/bin:/data/home/go/bin:/usr/local/go/bin:${PATH}
 RUN mkdir -p /data /workspace /plugins /config \
     && chown node:node /data /workspace /plugins /config
@@ -71,6 +79,7 @@ COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/dsh-entrypoint
 COPY --chmod=755 docker/dsh.sh /usr/local/bin/dsh
 COPY --chmod=755 docker/healthcheck.mjs /usr/local/bin/dsh-healthcheck
 COPY docker/listen-address.mjs /opt/dsh/listen-address.mjs
+COPY docker/web-checks.mjs /opt/dsh/web-checks.mjs
 WORKDIR /workspace
 USER node
 EXPOSE 3080

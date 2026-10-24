@@ -36,7 +36,9 @@ On your own computer, replace `user@server` with your SSH login:
 ssh -N -L 3080:127.0.0.1:3080 user@server
 ```
 
-Open <http://127.0.0.1:3080>. The default deployment is reachable only through the server's loopback interface. Use an authenticated TLS reverse proxy for domain access. The trusted-host setting is an address check, not authentication.
+Run `docker compose logs dsh` on the server and find the startup login URL containing a `token` query parameter. Its container IP is usually not directly reachable. With the tunnel above, replace only the URL's host and port with `127.0.0.1:3080`, preserve the complete path and query parameters, and open that URL. A bare address does not supply the initial login credential.
+
+Treat the startup token as a sensitive login credential; do not share it publicly or include it in issues. Harness exchanges it for a signed cookie used to authenticate APIs and WebSocket connections. The trusted-host setting checks the address separately. The default deployment binds the server's loopback interface; use an authenticated TLS reverse proxy for domain access, preserving the token while adapting the login URL to the external HTTPS address and any configured path prefix.
 
 Images become available after a successful release workflow. Before the first release, build locally and set `DSH_IMAGE=razeencheng/dsh:local`; start Compose without pulling.
 
@@ -63,12 +65,14 @@ Docker support consists only of client tools. No daemon or host socket is enable
 | Host directory | Container directory | Purpose |
 | --- | --- | --- |
 | `data/.dsh` | `/data/.dsh` | Harness state, profiles, sessions and credentials |
-| `data/home` | `/data/home` | Home directory, caches and user tools |
+| `data/home` | `/data/home` | Home directory, configuration and user tools |
 | `workspace` | `/workspace` | Project files |
 | `plugins` | `/plugins` | Local plugin source |
 | `config` | `/config` | Read-only configuration |
 
 Back up `data` and project files before upgrading. Container recreation preserves these mounts but does not roll back application data changes. Python projects should use a virtual environment, such as `python3 -m venv /workspace/my-project/.venv`.
+
+Default Go, npm, pip and XDG caches use `/tmp/dsh-cache`, which is writable inside `workspace-write` and recreated after container replacement. Home and global tool installation paths remain under `/data/home`; installing global tools requires appropriate write permissions.
 
 ## Releases
 

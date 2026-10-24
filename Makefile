@@ -37,6 +37,7 @@ push: builder
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) $(BUILD_ARGS) --tag $(IMAGE):$(TAG) --push .
 test:
 	python3 -m unittest discover -s tests -v
+	node --test docker/*.test.mjs
 smoke:
 	bash scripts/smoke-test.sh $(IMAGE):$(TAG) $(INSTALL_PYTHON) $(INSTALL_GO) $(INSTALL_DOCKER)
 check: test

@@ -39,7 +39,7 @@ jobs:
           ref: main
           persist-credentials: false
       - name: Test release planner
-        run: python3 -m unittest discover -s tests -v
+        run: make test
       - name: Discover and persist release queue
         id: plan
         env:
@@ -59,6 +59,7 @@ jobs:
           retention-days: 14
 
   build:
+    name: Build ${{ matrix.arch }} / ${{ matrix.version }}-r${{ matrix.revision }}
     needs: prepare
     if: needs.prepare.outputs.has_work == 'true'
     strategy:
@@ -92,6 +93,7 @@ jobs:
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - name: Smoke test tools, Web UI and sandbox
+        timeout-minutes: 10
         run: bash scripts/smoke-test.sh dsh:test
       - name: Log in only after image tests pass
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0

@@ -22,7 +22,8 @@ docker run --rm "${security[@]}" --entrypoint /bin/bash "$image" -euc '
 # Exercise Harness's real backend selection (Bubblewrap, then Landlock).
 # The outside target is writable before confinement, so Unix ownership cannot
 # accidentally make a broken sandbox look safe.
-docker run --rm -i "${security[@]}" --entrypoint node "$image" --input-type=module <<'NODE'
+docker run --rm -i "${security[@]}" -e SMOKE_GO_ENABLED="$go_enabled" \
+  --entrypoint node "$image" --input-type=module <<'NODE'
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -37,21 +38,26 @@ const inside = `/workspace/sandbox-${id}`;
 const readonly = `${inside}-readonly`;
 const outside = `/data/sandbox-${id}`;
 const created = `${outside}-new`;
+const goSource = `${inside}.go`;
+const goBinary = `${inside}-go`;
 writeFileSync(outside, 'original');
 const ctx = new Context();
 try {
   await ctx.plugin(LocalSandboxProvider, {});
-  async function run(code, mode) {
-    const confined = await ctx.sandbox.confine([process.execPath, '-e', code], {
+  async function execute(argv, mode, timeout = 10000) {
+    const confined = await ctx.sandbox.confine(argv, {
       mode, workspaceRoot: '/workspace',
     });
     assert.ok(['bwrap', 'landlock-run'].includes(basename(confined.argv[0])));
     const result = spawnSync(confined.argv[0], confined.argv.slice(1), {
-      encoding: 'utf8', timeout: 10000,
+      encoding: 'utf8', timeout,
+      env: { ...process.env, GO111MODULE: 'off', GOTOOLCHAIN: 'local', GOPROXY: 'off', GOSUMDB: 'off' },
     });
     assert.equal(result.status, 0, result.stderr || String(result.error));
     console.log(`Sandbox ${mode}: ${basename(confined.argv[0])}, ${confined.enforcement}`);
+    return result;
   }
+  const run = (code, mode) => execute([process.execPath, '-e', code], mode);
   const deny = path => `try { fs.writeFileSync(${JSON.stringify(path)}, 'escaped'); process.exit(99); }
     catch (error) { if (!['EACCES', 'EROFS'].includes(error.code)) throw error; }`;
   await run(`const fs = require('node:fs');
@@ -63,9 +69,18 @@ try {
   assert.equal(existsSync(created), false);
   await run(`const fs = require('node:fs'); ${deny(readonly)}`, 'read-only');
   assert.equal(existsSync(readonly), false);
+  await execute(['npm', 'cache', 'verify'], 'workspace-write', 60000);
+  console.log('npm cache works inside workspace-write');
+  if (process.env.SMOKE_GO_ENABLED === 'true') {
+    writeFileSync(goSource, 'package main\nimport "fmt"\nfunc main() { fmt.Println("go-cache-ok") }\n');
+    await execute(['go', 'build', '-o', goBinary, goSource], 'workspace-write', 120000);
+    const goRun = await execute([goBinary], 'workspace-write');
+    assert.equal(goRun.stdout.trim(), 'go-cache-ok');
+    console.log('Go builds and runs offline inside workspace-write');
+  }
 } finally {
   await ctx.fiber.dispose();
-  for (const path of [inside, readonly, outside, created]) rmSync(path, { force: true });
+  for (const path of [inside, readonly, outside, created, goSource, goBinary]) rmSync(path, { force: true });
 }
 NODE
 docker run --rm --entrypoint /bin/bash "$image" -euc '
@@ -80,6 +95,25 @@ docker run -d --name "$container" "${security[@]}" \
   "$image" web --trusted-host 127.0.0.1 >/dev/null
 for _ in $(seq 1 90); do
   if docker exec "$container" /usr/local/bin/dsh-healthcheck; then
+    logs=$(docker logs "$container" 2>&1)
+    if printf '%s\n' "$logs" | grep -Eq '[1-9][0-9]* entr(y|ies) did not activate|failed to import:'; then
+      printf 'Web plugins did not all activate\n' >&2
+      break
+    fi
+    launch_url=$(printf '%s\n' "$logs" | sed -nE 's/.*dsh web: (http[^[:space:]]*\?token=[^[:space:]]*).*/\1/p' | tail -1)
+    if [ -z "$launch_url" ]; then sleep 2; continue; fi
+    if ! docker exec -i -e SMOKE_WEB_URL="$launch_url" "$container" node --input-type=module <<'NODE'
+import { checkBrowserLogin } from '/opt/dsh/web-checks.mjs';
+try {
+  await checkBrowserLogin(process.env.SMOKE_WEB_URL);
+  console.log('Web assets, token exchange, session cookie, and authenticated HTML passed');
+} catch (error) {
+  // Never expose the login URL in CI failure output.
+  console.error(`Web login check: ${error.message.replace(/([?&]token=)[^\s&]+/g, '$1[REDACTED]')}`);
+  process.exitCode = 1;
+}
+NODE
+    then break; fi
     docker exec "$container" /bin/sh -ec 'test -d "$HOME" && test -w "$HOME" && test -d "$DSH_HOME"'
     printf 'Smoke test passed: %s\n' "$image"
     exit 0
@@ -87,6 +121,7 @@ for _ in $(seq 1 90); do
   if [ "$(docker inspect --format '{{.State.Running}}' "$container")" != true ]; then break; fi
   sleep 2
 done
-docker logs "$container" >&2
+docker exec "$container" /usr/local/bin/dsh-healthcheck --verbose || true
+docker logs "$container" 2>&1 | sed -E 's/([?&]token=)[^[:space:]&]+/\1[REDACTED]/g' >&2
 printf 'Web health check failed: %s\n' "$image" >&2
 exit 1

@@ -19,7 +19,7 @@ chmod 600 .env
 | 环境变量或目录 | 用途 |
 | --- | --- |
 | `DSH_HOME=/data/.dsh` | Harness 配置、profiles、skills、sessions、storages 等 |
-| `HOME=/data/home` | 用户配置、SSH、缓存和用户安装的软件 |
+| `HOME=/data/home` | 用户配置、SSH 和用户安装的软件 |
 | `GOPATH=/data/home/go` | Go 工作目录和 `go install` 的程序 |
 | `NPM_CONFIG_PREFIX=/data/home/.local` | 非 root 用户安装 npm 全局工具的位置 |
 | `/workspace` | 默认工作目录 |
@@ -27,6 +27,8 @@ chmod 600 .env
 | `/config` | 自定义配置，只读 |
 
 入口程序创建用户目录；重建容器会保留挂载到 `data` 的内容。镜像内其他临时修改不会因此持久化，系统工具应写入 Dockerfile 后重新构建。
+
+默认构建缓存放在 `/tmp/dsh-cache`：Go 的 `GOCACHE` 和 `GOMODCACHE` 分别使用 `go-build`、`go-mod` 子目录，`NPM_CONFIG_CACHE`、`PIP_CACHE_DIR`、`XDG_CACHE_HOME` 分别使用 `npm`、`pip`、`xdg` 子目录。这样工具在 `workspace-write` 中无需写入被限制的 `/data` 主目录；这些缓存可重新生成，容器重建后不保留。`HOME`、`GOPATH` 中的程序和 npm 全局安装目录仍位于持久化的 `/data/home`，全局安装需要相应写入权限，项目依赖和 Python 虚拟环境优先放在 `/workspace` 内。
 
 ## 访问 Web UI
 
@@ -53,15 +55,25 @@ docker compose ps
 ssh -N -L 3080:127.0.0.1:3080 user@server
 ```
 
-打开 <http://127.0.0.1:3080>。如果改用 `localhost` 或不同本地端口，应同步调整 `DSH_TRUSTED_HOST`。
+在服务器读取启动日志：
+
+```sh
+docker compose logs dsh
+```
+
+找到包含 `token` 查询参数的启动登录 URL。日志里的容器 IP 通常不能从自己电脑直接访问；通过上述隧道连接时，仅将 URL 的主机和端口替换为 `127.0.0.1:3080`，保留完整路径、token 和其他查询参数，再在浏览器打开。首次访问裸地址不能提供登录凭据。如果改用 `localhost` 或不同本地端口，应同步调整 `DSH_TRUSTED_HOST`。
+
+Harness 使用启动 token 交换签名 cookie，为 API 和 WebSocket 连接认证。包含 token 的 URL 和启动日志应按敏感登录凭据保管，分享排错日志前先移除 token。
 
 ### 域名与反向代理
 
 在服务器部署带身份认证和 TLS 的反向代理，转发到 `http://127.0.0.1:3080`，并支持 WebSocket。保留浏览器使用的 Host 信息，将 `DSH_TRUSTED_HOST` 设置为对应域名或域名加显式端口，例如 `harness.example.com` 或 `harness.example.com:8443`，不包含协议或路径。
 
+同样从启动日志取得登录 URL，将协议和主机端口换成外部 HTTPS 地址，并保留完整 token 查询参数。如果部署配置了路径前缀，也使用相应的外部前缀。代理认证是额外的访问控制，不取代 Harness 自身的 token/cookie 登录流程。
+
 反向代理若也运行在容器中，其 `127.0.0.1` 指向自己。此时应显式配置共享 Docker 网络或可访问的宿主机地址，再据此设置代理目标。不要简单开放公网端口来绕过网络配置。
 
-`DSH_TRUSTED_HOST` 不提供登录认证。默认 Compose 仅向宿主机回环地址发布端口；若更改 `DSH_BIND_ADDRESS`，需同时考虑防火墙与认证边界。
+`DSH_TRUSTED_HOST` 只校验访问地址，与 Harness 的 token/cookie 登录认证相互独立。默认 Compose 仅向宿主机回环地址发布端口；若更改 `DSH_BIND_ADDRESS`，需同时考虑防火墙与认证边界。
 
 ### 容器内监听与健康检查
 
@@ -74,7 +86,9 @@ docker compose exec dsh /usr/local/bin/dsh-healthcheck
 docker compose logs --tail=100 dsh
 ```
 
-退出码 0 表示 Web HTTP 检查通过。它不验证 API Key、模型调用或外部服务是否可用。
+健康检查请求实际存在、公开可访问的前端 JavaScript 静态资源，收到 HTTP 200 时退出码为 0。它不要求受认证保护的首页在未登录时返回 200，也不验证 API Key、模型调用或外部服务是否可用。
+
+完整的 `make smoke` 另行验证登录流程：未认证首页返回 401，启动 token 交换返回 303 并设置 cookie，携带该 cookie 访问首页返回 200；同时检查启动日志中没有插件激活或模块导入失败。
 
 ## 沙箱要求
 
@@ -167,7 +181,7 @@ Docker CLI 向 daemon 发送命令，但 `docker run --mount` 等绑定挂载的
 
 1. 记录旧镜像标签或摘要以及当前 Compose、`.env`、自定义配置。先停服务，备份整个 `data`，并单独备份 `workspace`、`plugins` 中需要保留的文件。
 2. 保持原 `data/.dsh` 挂载到 `/data/.dsh`，保留 profiles、会话、技能和凭据，不要创建空目录覆盖原数据。
-3. 新镜像的 `HOME` 改为 `/data/home`。如果旧容器在 `/home/node` 中保存了 Git/SSH 配置、缓存或用户工具，先从旧容器提取所需文件，再复制到 `data/home`；仅挂载旧 `data` 不会自动迁移这些文件。
+3. 新镜像的 `HOME` 改为 `/data/home`。如果旧容器在 `/home/node` 中保存了 Git/SSH 配置或用户工具，先从旧容器提取所需文件，再复制到 `data/home`；仅挂载旧 `data` 不会自动迁移这些文件。默认构建缓存可重新生成，无需复制旧缓存。
 4. 确认 `data` 和工作目录对 UID 1000 可读写。旧镜像的 `web.cordis.patch.yml` 通配地址补丁不再是新入口的必需项，迁移时改用新 Compose 启动配置；自定义插件配置需按上游版本另行验证。
 5. 使用已发布的固定镜像版本启动，检查日志、Web、会话、插件和工具调用后再恢复日常使用。
 

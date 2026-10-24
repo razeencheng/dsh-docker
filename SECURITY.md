@@ -10,13 +10,13 @@
 - 默认不安装 Docker daemon，也不挂载宿主机 Docker socket。`docker-compose.docker.yml` 是明确启用宿主机控制能力的选项。
 - `config` 只读挂载；`data`、`workspace`、`plugins` 可写。挂载目录中的修改会直接作用于宿主机。
 
-`DSH_TRUSTED_HOST` 是访问地址检查，不能代替用户认证。不要把能够执行工具的 Web UI 无认证地开放到公网。网络连接、外部 API 和主动授予的凭据也不受文件目录隔离自动保护。
+Harness 使用启动 URL 中的 token 交换签名 cookie，为 API 和 WebSocket 连接认证。该 URL 和包含它的日志都是敏感登录凭据，不要公开分享，提交问题前需移除 token。`DSH_TRUSTED_HOST` 是独立的访问地址检查，不能代替认证。域名访问仍建议使用带认证的 TLS 反向代理作为额外控制。网络连接、外部 API 和主动授予的凭据也不受文件目录隔离自动保护。
 
 ## Docker socket 与凭据
 
 对于通常以 root 运行的 Docker daemon，获得其控制接口往往意味着能够控制宿主机，包括通过新容器挂载宿主机文件系统。非 root 容器用户不会抵消这一权限，socket 的只读挂载也不能将 Docker API 变成只读。[Docker 官方安全说明](https://docs.docker.com/engine/security/)
 
-尽量使用专用且权限有限的 Git、SSH 和 API 凭据。不要将整个个人主目录挂载给助手。`.env`、`data/.dsh` 和 `data/home` 可能含凭据、会话与缓存，备份也应按敏感数据保管。不要把它们添加到公开仓库或构建上下文。
+尽量使用专用且权限有限的 Git、SSH 和 API 凭据。不要将整个个人主目录挂载给助手。`.env`、`data/.dsh` 和 `data/home` 可能含凭据、会话与用户配置，备份也应按敏感数据保管。不要把它们添加到公开仓库或构建上下文。
 
 ## 更新与报告
 

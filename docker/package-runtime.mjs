@@ -2,7 +2,7 @@
 import { copyFile, mkdir } from 'node:fs/promises';
 import { restoreLegacyHoists } from '/src/scripts/executable-packaging.ts';
 import { materializeStagedLinks, deduplicateStagedWorkspacePackages } from '/src/scripts/build-exe-for-python-sdk-staging.ts';
-await restoreLegacyHoists('/opt/dsh', '/src/python/sdk-runtime/node_modules');
+await restoreLegacyHoists('/opt/dsh', '/src/apps/docker-runtime/node_modules');
 await materializeStagedLinks('/opt/dsh');
 await deduplicateStagedWorkspacePackages('/opt/dsh', '/src');
 await mkdir('/opt/dsh/licenses', { recursive: true });
