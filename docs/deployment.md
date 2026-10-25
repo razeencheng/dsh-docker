@@ -182,7 +182,7 @@ Docker CLI 向 daemon 发送命令，但 `docker run --mount` 等绑定挂载的
 1. 记录旧镜像标签或摘要以及当前 Compose、`.env`、自定义配置。先停服务，备份整个 `data`，并单独备份 `workspace`、`plugins` 中需要保留的文件。
 2. 保持原 `data/.dsh` 挂载到 `/data/.dsh`，保留 profiles、会话、技能和凭据，不要创建空目录覆盖原数据。
 3. 新镜像的 `HOME` 改为 `/data/home`。如果旧容器在 `/home/node` 中保存了 Git/SSH 配置或用户工具，先从旧容器提取所需文件，再复制到 `data/home`；仅挂载旧 `data` 不会自动迁移这些文件。默认构建缓存可重新生成，无需复制旧缓存。
-4. 确认 `data` 和工作目录对 UID 1000 可读写。旧镜像的 `web.cordis.patch.yml` 通配地址补丁不再是新入口的必需项，迁移时改用新 Compose 启动配置；自定义插件配置需按上游版本另行验证。
+4. 确认 `data` 和工作目录对 UID 1000 可读写。新镜像自动选择容器内的具体监听地址，不再提供旧的 `/opt/dsh/web.cordis.patch.yml` 通配地址补丁。迁移时从旧 Compose 的 `command` 中删除 `--patch` 及该路径，改用新 Compose 启动配置；自定义插件配置需按上游版本另行验证。
 5. 使用已发布的固定镜像版本启动，检查日志、Web、会话、插件和工具调用后再恢复日常使用。
 
 ### 升级与回滚
@@ -198,3 +198,25 @@ docker compose ps
 回滚时将 `DSH_IMAGE` 改回已验证的旧修订版或摘要，再执行上述命令。应用升级可能修改持久化数据格式，回滚镜像并不会回滚数据；必要时在停服务后恢复升级前的备份。
 
 `latest` 和不带 `-rN` 的版本别名会移动，不能用它们保证回到某次具体打包。不要删除 `data` 来解决升级错误。
+
+### 启动报 `unknown option '--patch'`
+
+先检查实际生效的镜像和启动参数；此命令不会输出容器环境变量：
+
+```sh
+docker inspect "$(docker compose ps -q dsh)" \
+  --format 'image={{.Config.Image}} entrypoint={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}'
+```
+
+旧部署常使用 `--patch /opt/dsh/web.cordis.patch.yml` 修改监听地址。该文件已不再随新镜像提供，应移除这两个参数。`--trusted-host` 填浏览器使用的域名或 `host:port`，不要填写 `0.0.0.0`。例如通过 `dsh.example.com` 访问时：
+
+```yaml
+command:
+  - web
+  - --trusted-host
+  - dsh.example.com
+```
+
+保存后运行 `docker compose up -d --force-recreate dsh`，使启动参数生效，再查看 `docker compose logs --tail=50 -f dsh`。使用 `docker-compose` 的部署可将命令前缀替换为对应写法。
+
+如果确实需要自定义补丁，请将自己的文件放进挂载的 `config` 目录，并将 `--patch /config/extra.yml` 写在 `--trusted-host`、`--host`、`--port` 等 Web 参数之前。上游先解析启动器参数，再解析 Web 参数；`r4`、`r5` 的容器入口错误地提前插入 Web 参数，使用自定义补丁前需要更新到修复版本。

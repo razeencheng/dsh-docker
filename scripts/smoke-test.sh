@@ -9,7 +9,10 @@ for flag in "$python_enabled" "$go_enabled" "$docker_enabled"; do
   case "$flag" in true|false) ;; *) printf 'Expected true or false, got %s\n' "$flag" >&2; exit 2 ;; esac
 done
 container="dsh-smoke-$$-${RANDOM}"
-trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+patch_file=$(mktemp)
+trap 'docker rm -f "$container" >/dev/null 2>&1 || true; rm -f "$patch_file"' EXIT
+printf '[]\n' > "$patch_file"
+chmod 644 "$patch_file"
 security=(--security-opt seccomp=unconfined --security-opt no-new-privileges --cap-drop ALL)
 docker run --rm "${security[@]}" --entrypoint /bin/bash "$image" -euc '
   test "$(id -u)" = 1000
@@ -104,9 +107,11 @@ docker run --rm --entrypoint /bin/bash "$image" -euc '
 ' -- "$python_enabled" "$go_enabled" "$docker_enabled"
 docker run --rm "${security[@]}" "$image" --help >/dev/null
 docker run --rm "${security[@]}" "$image" web --help >/dev/null
+docker run --rm "${security[@]}" "$image" web --dump-default-config >/dev/null
 docker run -d --name "$container" "${security[@]}" \
+  --mount "type=bind,source=$patch_file,target=/config/smoke-extra.yml,readonly" \
   -e DSH_PERMISSION_MODE=workspace-write -e DSH_TELEMETRY_DISABLED=1 \
-  "$image" web --trusted-host 127.0.0.1 >/dev/null
+  "$image" web --patch /config/smoke-extra.yml --trusted-host 127.0.0.1 >/dev/null
 for _ in $(seq 1 90); do
   if docker exec "$container" /usr/local/bin/dsh-healthcheck; then
     logs=$(docker logs "$container" 2>&1)
