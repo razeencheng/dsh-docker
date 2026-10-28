@@ -5,12 +5,12 @@
     "dsh-v0.2.2-alpha.2": 1
   },
   "latest": {
-    "digest": "sha256:8f76a2a75a1ea459da81b512c66897654f459fa79dba4759cc5184b5912a9ca3",
+    "digest": "sha256:415f7e5b5c6b177ca95bf4136eceed4eda261b9a6d2cf295b16c1d54d626b7b1",
     "packaging_sha": "198fa151fa523ce211b0f4e09adcb13f90b030d4",
-    "revision": 6,
-    "sha": "1f81c047fc48fa190a683e469daa699857e9afe8",
-    "tag": "dsh-v0.2.1-rc.3",
-    "version": "0.2.1-rc.3"
+    "revision": 1,
+    "sha": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
+    "tag": "dsh-v0.2.2-alpha.2",
+    "version": "0.2.2-alpha.2"
   },
   "observed": {
     "dsh-v0.1.0-rc.7": "99f6f02fecdb7dff40c3fbc9470f5907c29f74ca",
@@ -56,13 +56,6 @@
       "sha": "504a01a9578abc2c6f1fb896b1dc322c9fe24f66",
       "tag": "dsh-v0.2.1-rc.4",
       "version": "0.2.1-rc.4"
-    },
-    "dsh-v0.2.2-alpha.2": {
-      "packaging_sha": "198fa151fa523ce211b0f4e09adcb13f90b030d4",
-      "revision": 1,
-      "sha": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
-      "tag": "dsh-v0.2.2-alpha.2",
-      "version": "0.2.2-alpha.2"
     }
   },
   "published": {
@@ -90,6 +83,16 @@
         "sha": "1f81c047fc48fa190a683e469daa699857e9afe8",
         "tag": "dsh-v0.2.1-rc.3",
         "version": "0.2.1-rc.3"
+      }
+    },
+    "dsh-v0.2.2-alpha.2": {
+      "1": {
+        "digest": "sha256:415f7e5b5c6b177ca95bf4136eceed4eda261b9a6d2cf295b16c1d54d626b7b1",
+        "packaging_sha": "198fa151fa523ce211b0f4e09adcb13f90b030d4",
+        "revision": 1,
+        "sha": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
+        "tag": "dsh-v0.2.2-alpha.2",
+        "version": "0.2.2-alpha.2"
       }
     }
   },
